@@ -1,5 +1,6 @@
 use std::ops::Range;
 use std::panic;
+use tlsn_prover::tls::state::Setup;
 use web_time::Instant;
 
 use futures::channel::oneshot;
@@ -25,6 +26,8 @@ use web_sys::{Headers, RequestInit, RequestMode};
 
 use tlsn_core::proof::TlsProof;
 
+use async_io_stream::IoStream;
+
 use crate::log;
 
 use strum::EnumMessage;
@@ -34,7 +37,7 @@ use strum_macros;
 #[allow(dead_code)]
 enum ProverPhases {
     #[strum(message = "Connect application server with websocket proxy")]
-    ConnectWsProxy,
+    ConnectClientWsProxy,
     #[strum(message = "Build prover config")]
     BuildProverConfig,
     #[strum(message = "Set up prover")]
@@ -116,97 +119,22 @@ pub async fn prover(
 
     let start_time = Instant::now();
 
-    /*
-     * Connect Notary with websocket
-     */
+    let notarization_response = initialize_notarization_session(&options).await?;
 
-    let mut opts = RequestInit::new();
-    log!("method: {}", "POST");
-    opts.method("POST");
-    // opts.method("GET");
-    opts.mode(RequestMode::Cors);
+    let notary_ws_stream_into =
+        initialize_and_connect_websocket_proxy_notary(&options, &notarization_response.session_id)
+            .await?;
 
-    // set headers
-    let headers = Headers::new()
-        .map_err(|e| JsValue::from_str(&format!("Could not create headers: {:?}", e)))?;
-    let notary_url = Url::parse(options.notary_url.as_str())
-        .map_err(|e| JsValue::from_str(&format!("Could not parse notary_url: {:?}", e)))?;
-    let notary_ssl = notary_url.scheme() == "https" || notary_url.scheme() == "wss";
-    let notary_host = notary_url.authority();
+    log_phase(ProverPhases::ConnectClientWsProxy);
+    let client_ws_stream_into = connect_websocket_proxy_client(&options).await?;
 
-    headers
-        .append("Host", notary_host)
-        .map_err(|e| JsValue::from_str(&format!("Could not append Host header: {:?}", e)))?;
-    headers
-        .append("Content-Type", "application/json")
-        .map_err(|e| {
-            JsValue::from_str(&format!("Could not append Content-Type header: {:?}", e))
-        })?;
-    opts.headers(&headers);
-
-    log!("notary_host: {}", notary_host);
-    // set body
-    let payload = serde_json::to_string(&NotarizationSessionRequest {
-        client_type: ClientType::Websocket,
-        max_transcript_size: Some(options.max_transcript_size),
-    })
-    .map_err(|e| JsValue::from_str(&format!("Could not serialize request: {:?}", e)))?;
-    opts.body(Some(&JsValue::from_str(&payload)));
-
-    // url
-    let url = format!(
-        "{}://{}/session",
-        if notary_ssl { "https" } else { "http" },
-        notary_host
-    );
-    log!("Request: {}", url);
-    let rust_string = crate::fetch_as_json_string(&url, &opts)
-        .await
-        .map_err(|e| JsValue::from_str(&format!("Could not fetch session: {:?}", e)))?;
-    let notarization_response =
-        serde_json::from_str::<NotarizationSessionResponse>(&rust_string)
-            .map_err(|e| JsValue::from_str(&format!("Could not deserialize response: {:?}", e)))?;
-    log!("Response: {}", rust_string);
-
-    log!("Notarization response: {:?}", notarization_response,);
-    let notary_wss_url = format!(
-        "{}://{}/notarize?sessionId={}",
-        if notary_ssl { "wss" } else { "ws" },
-        notary_host,
-        notarization_response.session_id
-    );
-    let (_, notary_ws_stream) = WsMeta::connect(notary_wss_url, None)
-        .await
-        .expect_throw("assume the notary ws connection succeeds");
-    let notary_ws_stream_into = notary_ws_stream.into_io();
-
-    log_phase(ProverPhases::ConnectWsProxy);
-
-    let (_, client_ws_stream) = WsMeta::connect(options.websocket_proxy_url, None)
-        .await
-        .expect_throw("assume the client ws connection succeeds");
-    let client_ws_stream_into = client_ws_stream.into_io();
-
-    log_phase(ProverPhases::BuildProverConfig);
-
-    let target_host = target_url
-        .host_str()
-        .ok_or(JsValue::from_str("Could not get target host"))?;
-    // Basic default prover config
-    let config = ProverConfig::builder()
-        .id(notarization_response.session_id)
-        .server_dns(target_host)
-        .max_transcript_size(options.max_transcript_size)
-        .build()
-        .map_err(|e| JsValue::from_str(&format!("Could not build prover config: {:?}", e)))?;
-
-    // Create a Prover and set it up with the Notary
-    // This will set up the MPC backend prior to connecting to the server.
-    log_phase(ProverPhases::SetUpProver);
-    let prover = Prover::new(config)
-        .setup(notary_ws_stream_into)
-        .await
-        .map_err(|e| JsValue::from_str(&format!("Could not set up prover: {:?}", e)))?;
+    let prover = create_prover(
+        options.max_transcript_size,
+        &notarization_response.session_id,
+        &target_url,
+        notary_ws_stream_into,
+    )
+    .await?;
 
     // Bind the Prover to the server connection.
     // The returned `mpc_tls_connection` is an MPC TLS connection to the Server: all data written
@@ -476,4 +404,122 @@ fn string_list_to_bytes_vec(secrets: &JsValue) -> Result<Vec<Vec<u8>>, JsValue> 
         byte_slices.push(secret_bytes);
     }
     Ok(byte_slices)
+}
+
+async fn initialize_notarization_session(
+    options: &RequestOptions,
+) -> Result<NotarizationSessionResponse, JsValue> {
+    /*
+     * Connect Notary with websocket
+     */
+
+    let mut opts = RequestInit::new();
+    log!("method: {}", "POST");
+    opts.method("POST");
+    // opts.method("GET");
+    opts.mode(RequestMode::Cors);
+
+    // set headers
+    let headers = Headers::new()
+        .map_err(|e| JsValue::from_str(&format!("Could not create headers: {:?}", e)))?;
+    let notary_url = Url::parse(options.notary_url.as_str())
+        .map_err(|e| JsValue::from_str(&format!("Could not parse notary_url: {:?}", e)))?;
+    let notary_ssl = notary_url.scheme() == "https";
+    let notary_host = notary_url.authority();
+
+    headers
+        .append("Host", notary_host)
+        .map_err(|e| JsValue::from_str(&format!("Could not append Host header: {:?}", e)))?;
+    headers
+        .append("Content-Type", "application/json")
+        .map_err(|e| {
+            JsValue::from_str(&format!("Could not append Content-Type header: {:?}", e))
+        })?;
+    opts.headers(&headers);
+
+    log!("notary_host: {}", notary_host);
+    // set body
+    let payload = serde_json::to_string(&NotarizationSessionRequest {
+        client_type: ClientType::Websocket,
+        max_transcript_size: Some(options.max_transcript_size),
+    })
+    .map_err(|e| JsValue::from_str(&format!("Could not serialize request: {:?}", e)))?;
+    opts.body(Some(&JsValue::from_str(&payload)));
+
+    // url
+    let url = format!(
+        "{}://{}/session",
+        if notary_ssl { "https" } else { "http" },
+        notary_host
+    );
+    log!("Request: {}", url);
+    let rust_string = crate::fetch_as_json_string(&url, &opts)
+        .await
+        .map_err(|e| JsValue::from_str(&format!("Could not fetch session: {:?}", e)))?;
+    let notarization_response =
+        serde_json::from_str::<NotarizationSessionResponse>(&rust_string)
+            .map_err(|e| JsValue::from_str(&format!("Could not deserialize response: {:?}", e)))?;
+
+    log!("Notarization response: {:?}", rust_string);
+
+    Ok(notarization_response)
+}
+
+async fn initialize_and_connect_websocket_proxy_notary(
+    options: &RequestOptions,
+    session_id: &String,
+) -> Result<IoStream<WsStreamIo, Vec<u8>>, JsValue> {
+    let websocket_proxy_url = Url::parse(options.websocket_proxy_url.as_str())
+        .map_err(|e| JsValue::from_str(&format!("Could not parse websocket_proxy_url: {:?}", e)))?;
+    let websocket_proxy_ssl = websocket_proxy_url.scheme() == "wss";
+
+    let notary_wss_url = format!(
+        "{}://{}/notarize?sessionId={}",
+        if websocket_proxy_ssl { "wss" } else { "ws" },
+        websocket_proxy_url.authority(),
+        session_id
+    );
+    let (_, notary_ws_stream) = WsMeta::connect(notary_wss_url, None)
+        .await
+        .expect_throw("assume the notary ws connection succeeds");
+    let notary_ws_stream_into = notary_ws_stream.into_io();
+    Ok(notary_ws_stream_into)
+}
+
+async fn connect_websocket_proxy_client(
+    options: &RequestOptions,
+) -> Result<IoStream<WsStreamIo, Vec<u8>>, JsValue> {
+    let (_, client_ws_stream) = WsMeta::connect(&options.websocket_proxy_url, None)
+        .await
+        .expect_throw("assume the client ws connection succeeds");
+    let client_ws_stream_into = client_ws_stream.into_io();
+    Ok(client_ws_stream_into)
+}
+
+async fn create_prover(
+    max_transcript_size: usize,
+    session_id: &String,
+    target_url: &Url,
+    notary_ws_stream_into: IoStream<WsStreamIo, Vec<u8>>,
+) -> Result<Prover<Setup>, JsValue> {
+    log_phase(ProverPhases::BuildProverConfig);
+    let target_host = target_url
+        .host_str()
+        .ok_or(JsValue::from_str("Could not get target host"))?;
+    // Basic default prover config
+    let config = ProverConfig::builder()
+        .id(session_id)
+        .server_dns(target_host)
+        .max_transcript_size(max_transcript_size)
+        .build()
+        .map_err(|e| JsValue::from_str(&format!("Could not build prover config: {:?}", e)))?;
+
+    // Create a Prover and set it up with the Notary
+    // This will set up the MPC backend prior to connecting to the server.
+    log_phase(ProverPhases::SetUpProver);
+    let prover = Prover::new(config)
+        .setup(notary_ws_stream_into)
+        .await
+        .map_err(|e| JsValue::from_str(&format!("Could not set up prover: {:?}", e)))?;
+    Ok(prover)
 }
