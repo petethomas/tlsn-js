@@ -25,18 +25,12 @@ pub(crate) use log;
 
 extern crate console_error_panic_hook;
 
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = self)]
-    fn fetch(request: &web_sys::Request) -> js_sys::Promise;
-}
-
 async fn fetch_as_json_string(url: &str, opts: &RequestInit) -> Result<String, JsValue> {
     let request = WebsysRequest::new_with_str_and_init(url, opts)?;
-    let promise = fetch(&request);
-    let future = JsFuture::from(promise);
-    let resp_value = future.await?;
-    let resp: Response = resp_value.dyn_into()?;
+    let window = web_sys::window().unwrap();
+    let resp_value = JsFuture::from(window.fetch_with_request(&request)).await?;
+    assert!(resp_value.is_instance_of::<Response>());
+    let resp: Response = resp_value.dyn_into().unwrap();
     let json = JsFuture::from(resp.json()?).await?;
     let stringified = JSON::stringify(&json)?;
     stringified

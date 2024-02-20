@@ -46,24 +46,24 @@ tlsn-prover = {git = "https://github.com/tlsnotary/tlsn.git", tag = "v0.1.0-alph
 ]}
 
 web-sys = {version = "0.3.4", features = [
+  'Document',
+  'Headers',
+  'HtmlElement',
+  'HtmlInputElement',
+  'Request',
+  'RequestInit',
+  'RequestMode',
+  'Response',
+  'Window',
+  'Worker',
   "BinaryType",
   "Blob",
+  "console",
   "ErrorEvent",
   "FileReader",
   "MessageEvent",
   "ProgressEvent",
   "WebSocket",
-  "console",
-  'Document',
-  'HtmlElement',
-  'HtmlInputElement',
-  'Window',
-  'Worker',
-  'Headers',
-  'Request',
-  'RequestInit',
-  'RequestMode',
-  'Response',
 ]}
 
 # Use the patched ws_stream_wasm to fix the issue https://github.com/najamelan/ws_stream_wasm/issues/12#issuecomment-1711902958
@@ -75,9 +75,9 @@ ws_stream_wasm = {version = "0.7.4", git = "https://github.com/tlsnotary/ws_stre
 # code size when deploying.
 console_error_panic_hook = {version = "0.1.7"}
 
+async_io_stream = "0.3.3"
 strum = {version = "0.26.1"}
 strum_macros = "0.26.1"
-async_io_stream = "0.3.3"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.34"

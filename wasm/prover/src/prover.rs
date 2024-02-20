@@ -91,12 +91,10 @@ pub async fn prover(
     let target_url = Url::parse(target_url_str)
         .map_err(|e| JsValue::from_str(&format!("Could not parse target_url: {:?}", e)))?;
 
-    log!(
-        "target_url.host: {}",
-        target_url
-            .host()
-            .ok_or(JsValue::from_str("Could not get target host"))?
-    );
+    target_url
+        .host()
+        .ok_or(JsValue::from_str("Could not get target host"))?;
+
     let options: RequestOptions = serde_wasm_bindgen::from_value(val)
         .map_err(|e| JsValue::from_str(&format!("Could not deserialize options: {:?}", e)))?;
     log!("options.notary_url: {}", options.notary_url.as_str());
@@ -409,14 +407,8 @@ fn string_list_to_bytes_vec(secrets: &JsValue) -> Result<Vec<Vec<u8>>, JsValue> 
 async fn initialize_notarization_session(
     options: &RequestOptions,
 ) -> Result<NotarizationSessionResponse, JsValue> {
-    /*
-     * Connect Notary with websocket
-     */
-
     let mut opts = RequestInit::new();
-    log!("method: {}", "POST");
     opts.method("POST");
-    // opts.method("GET");
     opts.mode(RequestMode::Cors);
 
     // set headers
@@ -424,7 +416,7 @@ async fn initialize_notarization_session(
         .map_err(|e| JsValue::from_str(&format!("Could not create headers: {:?}", e)))?;
     let notary_url = Url::parse(options.notary_url.as_str())
         .map_err(|e| JsValue::from_str(&format!("Could not parse notary_url: {:?}", e)))?;
-    let notary_ssl = notary_url.scheme() == "https";
+
     let notary_host = notary_url.authority();
 
     headers
@@ -437,7 +429,6 @@ async fn initialize_notarization_session(
         })?;
     opts.headers(&headers);
 
-    log!("notary_host: {}", notary_host);
     // set body
     let payload = serde_json::to_string(&NotarizationSessionRequest {
         client_type: ClientType::Websocket,
@@ -446,13 +437,9 @@ async fn initialize_notarization_session(
     .map_err(|e| JsValue::from_str(&format!("Could not serialize request: {:?}", e)))?;
     opts.body(Some(&JsValue::from_str(&payload)));
 
-    // url
-    let url = format!(
-        "{}://{}/session",
-        if notary_ssl { "https" } else { "http" },
-        notary_host
-    );
-    log!("Request: {}", url);
+    let url = format!("{}://{}/session", notary_url.scheme(), notary_host);
+    log!("Notarization session request: {}", url);
+
     let rust_string = crate::fetch_as_json_string(&url, &opts)
         .await
         .map_err(|e| JsValue::from_str(&format!("Could not fetch session: {:?}", e)))?;
@@ -460,7 +447,7 @@ async fn initialize_notarization_session(
         serde_json::from_str::<NotarizationSessionResponse>(&rust_string)
             .map_err(|e| JsValue::from_str(&format!("Could not deserialize response: {:?}", e)))?;
 
-    log!("Notarization response: {:?}", rust_string);
+    log!("Notarization response: {:?}", notarization_response);
 
     Ok(notarization_response)
 }
