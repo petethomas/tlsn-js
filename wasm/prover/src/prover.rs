@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::ops::Range;
 use std::panic;
 use tlsn_prover::tls::state::Setup;
@@ -161,35 +162,19 @@ pub async fn prover(
     // Spawn the HTTP task to be run concurrently
     log_phase(ProverPhases::SpawnHttpTask);
     let (connection_sender, connection_receiver) = oneshot::channel();
-    let connection_fut = connection.without_shutdown();
     let handled_connection_fut = async {
-        let result = connection_fut.await;
+        let result = connection.without_shutdown().await;
         let _ = connection_sender.send(result);
     };
     spawn_local(handled_connection_fut);
 
     log_phase(ProverPhases::BuildRequest);
-    let mut req_with_header = Request::builder()
-        .uri(target_url_str)
-        .method(options.method.as_str());
-
-    for (key, value) in options.headers {
-        log!("adding header: {} - {}", key.as_str(), value.as_str());
-        req_with_header = req_with_header.header(key.as_str(), value.as_str());
-    }
-
-    let req_with_body;
-
-    if options.body.is_empty() {
-        log!("empty body");
-        req_with_body = req_with_header.body(Body::empty());
-    } else {
-        log!("added body - {}", options.body.as_str());
-        req_with_body = req_with_header.body(Body::from(options.body));
-    }
-
-    let unwrapped_request = req_with_body
-        .map_err(|e| JsValue::from_str(&format!("Could not build request: {:?}", e)))?;
+    let unwrapped_request = build_request(
+        &target_url_str,
+        &options.method,
+        options.headers,
+        options.body,
+    )?;
 
     log_phase(ProverPhases::StartMpcConnection);
 
@@ -509,4 +494,31 @@ async fn create_prover(
         .await
         .map_err(|e| JsValue::from_str(&format!("Could not set up prover: {:?}", e)))?;
     Ok(prover)
+}
+
+fn build_request(
+    target_url_str: &str,
+    method: &str,
+    headers: HashMap<String, String>,
+    body: String,
+) -> Result<Request<Body>, JsValue> {
+    let mut req_with_header = Request::builder().uri(target_url_str).method(method);
+
+    for (key, value) in headers {
+        log!("adding header: {} - {}", key.as_str(), value.as_str());
+        req_with_header = req_with_header.header(key.as_str(), value.as_str());
+    }
+
+    let req_with_body = if body.is_empty() {
+        log!("empty body");
+        req_with_header.body(Body::empty())
+    } else {
+        log!("added body - {}", body.as_str());
+        req_with_header.body(Body::from(body))
+    };
+
+    let unwrapped_request = req_with_body
+        .map_err(|e| JsValue::from_str(&format!("Could not build request: {:?}", e)))?;
+
+    Ok(unwrapped_request)
 }
