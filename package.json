@@ -30,7 +30,7 @@
     "test": "npm run build:test && npm run run:test"
   },
   "dependencies": {
-    "comlink": "^4.4.1"
+    "@extism/extism": "^1.0.2"
   },
   "devDependencies": {
     "@types/expect": "^24.3.0",
