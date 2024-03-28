@@ -21,9 +21,10 @@ use wasm_bindgen_futures::JsFuture;
 use web_sys::{Request, RequestInit, Response};
 
 use std::panic;
-use tracing_subscriber::fmt::format::Pretty;
 use tracing_subscriber::fmt::time::UtcTime;
 use tracing_subscriber::prelude::*;
+use tracing_subscriber::{fmt::format::Pretty, EnvFilter};
+// use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use tracing_web::{performance_layer, MakeWebConsoleWriter};
 
 extern crate console_error_panic_hook;
@@ -36,8 +37,13 @@ pub fn setup_tracing_web() {
         .with_writer(MakeWebConsoleWriter::new()); // write events to the console
     let perf_layer = performance_layer().with_details_from_fields(Pretty::default());
 
+    // Setup an environment filter
+    let env_filter = EnvFilter::try_new("info,tlsn_prover=trace,tls_mpc=trace") // Default to `info` level, but `debug` for `tlsn-prover`
+        .unwrap();
+
     tracing_subscriber::registry()
-        .with(tracing_subscriber::filter::LevelFilter::DEBUG)
+        .with(tracing_subscriber::filter::LevelFilter::TRACE)
+        .with(env_filter)
         .with(fmt_layer)
         .with(perf_layer)
         .init(); // Install these as subscribers to tracing events

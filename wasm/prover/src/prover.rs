@@ -1,4 +1,5 @@
 use futures::channel::oneshot;
+use gloo_utils::format::JsValueSerdeExt;
 use std::ops::Range;
 use tlsn_prover::tls::{Prover, ProverConfig};
 use wasm_bindgen_futures::spawn_local;
@@ -87,7 +88,13 @@ pub async fn prover(
             .host()
             .ok_or(JsValue::from_str("Could not get target host"))?
     );
-    let options: RequestOptions = serde_wasm_bindgen::from_value(val)
+
+    debug!("Val: {:?}", &val);
+    debug!("secret_headers: {:?}", &secret_headers);
+    debug!("secret_body: {:?}", &secret_body);
+
+    let options: RequestOptions = val
+        .into_serde()
         .map_err(|e| JsValue::from_str(&format!("Could not deserialize options: {:?}", e)))?;
     info!("options.notary_url: {}", options.notary_url.as_str());
 
@@ -119,6 +126,7 @@ pub async fn prover(
             JsValue::from_str(&format!("Could not append Content-Type header: {:?}", e))
         })?;
     opts.headers(&headers);
+    debug!("headers: {:?}", &headers);
 
     info!("notary_host: {}", notary_host);
     // set body
@@ -128,6 +136,8 @@ pub async fn prover(
     })
     .map_err(|e| JsValue::from_str(&format!("Could not serialize request: {:?}", e)))?;
     opts.body(Some(&JsValue::from_str(&payload)));
+
+    debug!("opts: {:?}", &opts);
 
     // url
     let url = format!(
@@ -142,15 +152,17 @@ pub async fn prover(
     let notarization_response =
         serde_json::from_str::<NotarizationSessionResponse>(&rust_string)
             .map_err(|e| JsValue::from_str(&format!("Could not deserialize response: {:?}", e)))?;
-    debug!("Response: {}", rust_string);
-
+    info!("Response: {}", rust_string);
     info!("Notarization response: {:?}", notarization_response,);
+
     let notary_wss_url = format!(
         "{}://{}/notarize?sessionId={}",
         if notary_ssl { "wss" } else { "ws" },
         notary_host,
         notarization_response.session_id
     );
+    debug!("notary_wss_url: {}", &notary_wss_url);
+
     let (_, notary_ws_stream) = WsMeta::connect(notary_wss_url, None)
         .await
         .expect_throw("assume the notary ws connection succeeds");
@@ -168,6 +180,7 @@ pub async fn prover(
         .max_transcript_size(options.max_transcript_size)
         .build()
         .map_err(|e| JsValue::from_str(&format!("Could not build prover config: {:?}", e)))?;
+    debug!("Response: {:?}", &config);
 
     // Create a Prover and set it up with the Notary
     // This will set up the MPC backend prior to connecting to the server.
