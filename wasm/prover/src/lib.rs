@@ -38,7 +38,7 @@ pub fn setup_tracing_web() {
     let perf_layer = performance_layer().with_details_from_fields(Pretty::default());
 
     // Setup an environment filter
-    let env_filter = EnvFilter::try_new("info,tlsn_prover=trace,tls_mpc=trace") // Default to `info` level, but `debug` for `tlsn-prover`
+    let env_filter = EnvFilter::try_new("DEBUG,yamux=DEBUG") // Default to `info` level, but `debug` for `tlsn-prover`
         .unwrap();
 
     tracing_subscriber::registry()

@@ -92,3 +92,14 @@ opt-level = "z" # Optimize for size
 
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = true
+
+[patch."https://github.com/privacy-scaling-explorations/mpz"]
+mpz-ot-core = { path = "../../../mpz/ot/mpz-ot-core" }
+mpz-ot = { path = "../../../mpz/ot/mpz-ot" }
+mpz-share-conversion = { path = "../../../mpz/share-conversion/mpz-share-conversion" }
+mpz-share-conversion-core = { path = "../../../mpz/share-conversion/mpz-share-conversion-core" }
+mpz-garble = { path = "../../../mpz/garble/mpz-garble" }
+mpz-garble-core = { path = "../../../mpz/garble/mpz-garble-core" }
+mpz-circuits = { path = "../../../mpz/mpz-circuits" }
+mpz-circuits-macros = { path = "../../../mpz/mpz-circuits-macros" }
+mpz-core = { path = "../../../mpz/mpz-core" }

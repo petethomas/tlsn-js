@@ -10,22 +10,11 @@ use std::{collections::HashMap, str};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_test::*;
 use web_sys::RequestInit;
+use tracing::debug;
 
 extern crate tlsn_extension_rs;
 use js_sys::Array;
 use tlsn_extension_rs::*;
-
-macro_rules! log {
-    ( $( $t:tt )* ) => {
-        web_sys::console::log_1(&format!( $( $t )* ).into());
-    }
-}
-
-macro_rules! debug {
-    ( $( $t:tt )* ) => {
-        web_sys::console::debug_1(&format!( $( $t )* ).into());
-    }
-}
 
 wasm_bindgen_test_configure!(run_in_browser);
 
@@ -99,15 +88,15 @@ async fn swapi_proof() {
         headers: headers,
         max_transcript_size: 16384,
         body: "".to_string(),
-        notary_url: "https://notary.pse.dev".to_string(),
+        notary_url: "http://localhost:7047".to_string(),
         websocket_proxy_url: "wss://notary.pse.dev/proxy?token=swapi.dev".to_string(),
     };
-    log!("Options.headers: {:?}", &options.headers);
-    log!("Options: {:?}", &options);
+    debug!("Options.headers: {:?}", &options.headers);
+    debug!("Options: {:?}", &options);
     // let val = serde_wasm_bindgen::to_value(&options).expect("Valid options");
     let val = JsValue::from_serde(&options).expect("Valid options");
 
-    log!("Val to_value: {:?}", &val);
+    debug!("Val to_value: {:?}", &val);
 
     let secret_headers = JsValue::from(
         ["test_secret"]
@@ -137,7 +126,7 @@ async fn swapi_proof() {
     //     "websocketProxyUrl": "wss://notary.pse.dev/proxy?token=swapi.dev",
     // });
     // let val = JsValue::from_serde(&input).expect("Valid options");
-    // log!("Val from_serde: {:?}", &val);
+    // debug!("Val from_serde: {:?}", &val);
 
     let proof = tlsn_extension_rs::prover(target_url, val, secret_headers, secret_body)
         .await

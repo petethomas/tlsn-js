@@ -1,7 +1,7 @@
 import React, { ReactElement, useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { prove, verify } from 'tlsn-js';
-import { Proof } from 'tlsn-js/build/types';
+import { prove, verify } from '../../src/index';
+import { Proof } from '../../src/types';
 import { Watch } from 'react-loader-spinner';
 
 const container = document.getElementById('root');
@@ -24,7 +24,7 @@ function App(): ReactElement {
     const p = await prove('https://swapi.dev/api/people/1', {
       method: 'GET',
       maxTranscriptSize: 16384,
-      notaryUrl: 'https://notary.pse.dev',
+      notaryUrl: 'http://localhost:7047',
       websocketProxyUrl: 'wss://notary.pse.dev/proxy?token=swapi.dev',
     });
     setProof(p);
