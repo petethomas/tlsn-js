@@ -6,11 +6,13 @@ extern crate wasm_bindgen_test;
 use gloo_utils::format::JsValueSerdeExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use wasm_bindgen_futures::{spawn_local, JsFuture};
 use std::{collections::HashMap, str};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_test::*;
 use web_sys::RequestInit;
 use tracing::debug;
+use futures_util::future::FutureExt;
 
 extern crate tlsn_extension_rs;
 use js_sys::Array;
@@ -77,6 +79,9 @@ async fn swapi_proof() {
     setup_tracing_web();
 
     debug!("Test start");
+
+    // spawn_local(JsFuture::from(init_thread_pool(8)).map(|_| ()));
+
     let target_url = "https://swapi.dev/api/people/1";
     let headers = HashMap::from([
         // ("secret".to_string(), "test_secret".to_string()),
@@ -111,8 +116,8 @@ async fn swapi_proof() {
             .collect::<Array>(),
     );
 
-    let secret_headers = JsValue::NULL;
-    let secret_body = JsValue::NULL;
+    // let secret_headers = JsValue::NULL;
+    // let secret_body = JsValue::NULL;
 
     // let input = json!({
     //     "method": "GET",

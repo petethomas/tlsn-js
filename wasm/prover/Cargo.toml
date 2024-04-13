@@ -103,3 +103,6 @@ mpz-garble-core = { path = "../../../mpz/garble/mpz-garble-core" }
 mpz-circuits = { path = "../../../mpz/mpz-circuits" }
 mpz-circuits-macros = { path = "../../../mpz/mpz-circuits-macros" }
 mpz-core = { path = "../../../mpz/mpz-core" }
+
+[patch."https://github.com/tlsnotary/tlsn-utils"]
+tlsn-utils-aio = { path = "../../../tlsn-utils/utils-aio" }
