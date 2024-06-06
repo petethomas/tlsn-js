@@ -48,6 +48,8 @@ tlsn-core = { git = "https://github.com/tlsnotary/tlsn.git", tag = "v0.1.0-alpha
 tlsn-prover = { git = "https://github.com/tlsnotary/tlsn.git", tag = "v0.1.0-alpha.5", package = "tlsn-prover", features = [
   "tracing",
 ] }
+tlsn-block-cipher = { git = "https://github.com/tlsnotary/tlsn.git", tag = "v0.1.0-alpha.5", package = "tlsn-block-cipher" }
+mpz-garble = { git = "https://github.com/privacy-scaling-explorations/mpz", rev = "9f7403b" }
 
 web-sys = { version = "0.3.4", features = [
   "BinaryType",
